@@ -1,352 +1,508 @@
-# main_dashboard.py - WITH WORKING ONLINE EXTRACTORS
+# main_dashboard.py
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-import json
-import re
-from datetime import datetime
+import subprocess
+import sys
+import os
+import webbrowser
+import time
+import threading
 
-# Free AI API (no key required for basic use)
-def get_ai_response(prompt, context=""):
-    """Get AI response using free API"""
-    try:
-        # Using Hugging Face Inference API (free tier)
-        API_URL = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-large"
-        headers = {"Authorization": "Bearer hf_xxxxxxxxxxxxxxxx"}  # You can get free token
-        
-        # For now, using a simple rule-based response since we can't use Ollama
-        ai_responses = {
-            "analyze": f"Based on the content analysis: {context[:200]}... The data shows meaningful patterns that can be used for further insights.",
-            "summary": f"Summary: The extracted content contains relevant information about the topic. Key points include important data patterns and insights.",
-            "extract": "Data extraction completed successfully. The content has been processed and is ready for analysis."
-        }
-        
-        for key, response in ai_responses.items():
-            if key in prompt.lower():
-                return response
-        
-        return "AI Analysis: The content has been processed successfully. You can now analyze the extracted data patterns."
+def check_port_in_use(port: int) -> bool:
+    """Check if a port is already in use"""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex(('localhost', port)) == 0
+
+def get_available_port(start_port: int = 8601) -> int:
+    """Find an available port starting from start_port"""
+    port = start_port
+    while check_port_in_use(port):
+        port += 1
+    return port
+
+def run_streamlit_app_in_thread(app_file: str, port: int):
+    """Run Streamlit app in a separate thread"""
+    def run_app():
+        try:
+            subprocess.run([
+                sys.executable, "-m", "streamlit", "run", 
+                app_file, 
+                "--server.port", str(port),
+                "--server.headless", "true",
+                "--browser.serverAddress", "localhost",
+                "--server.enableCORS", "false",
+                "--server.enableXsrfProtection", "false"
+            ], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error running {app_file}: {e}")
     
-    except Exception as e:
-        return f"AI analysis completed. {context[:100]}..."
-
-def extract_website_data(url):
-    """Extract data from website"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Extract various content types
-        data = {
-            'title': soup.title.string if soup.title else 'No title',
-            'meta_description': '',
-            'headings': [],
-            'paragraphs': [],
-            'links': [],
-            'images': []
-        }
-        
-        # Meta description
-        meta_desc = soup.find('meta', attrs={'name': 'description'})
-        if meta_desc:
-            data['meta_description'] = meta_desc.get('content', '')
-        
-        # Headings
-        for i in range(1, 4):
-            headings = soup.find_all(f'h{i}')
-            data['headings'].extend([h.get_text().strip() for h in headings[:3]])
-        
-        # Paragraphs
-        paragraphs = soup.find_all('p')
-        data['paragraphs'] = [p.get_text().strip() for p in paragraphs[:5] if p.get_text().strip()]
-        
-        # Links
-        links = soup.find_all('a', href=True)
-        data['links'] = [{'text': a.get_text().strip()[:50], 'url': a['href']} for a in links[:10]]
-        
-        return data, None
-        
-    except Exception as e:
-        return None, str(e)
-
-def linkedin_public_data(profile_url):
-    """Extract public LinkedIn data"""
-    try:
-        # For public LinkedIn profiles (limited data)
-        if 'linkedin.com/in/' not in profile_url:
-            return None, "Please enter a valid LinkedIn profile URL"
-        
-        # Simulate public data extraction
-        public_data = {
-            'name': 'Profile Name (Extracted)',
-            'headline': 'Professional Headline',
-            'about': 'About section content would appear here',
-            'experience': ['Experience item 1', 'Experience item 2'],
-            'skills': ['Skill 1', 'Skill 2', 'Skill 3']
-        }
-        
-        return public_data, None
-        
-    except Exception as e:
-        return None, str(e)
+    thread = threading.Thread(target=run_app, daemon=True)
+    thread.start()
+    return thread
 
 def main():
     st.set_page_config(
-        page_title="AI Data Extractor Dashboard",
+        page_title="Social Media & Website Extractor Dashboard",
         page_icon="🔍",
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
-    # Custom CSS
+    # Simple dark theme CSS
     st.markdown("""
     <style>
-    .main-header {
-        background: linear-gradient(135deg, #1a2a6c, #b21f1f);
-        color: white;
-        padding: 2rem;
-        border-radius: 10px;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .tool-card {
-        background-color: #262730;
-        padding: 1.5rem;
-        border-radius: 10px;
-        border-left: 4px solid;
-        margin: 1rem 0;
-        height: 320px;
-    }
-    .extraction-result {
-        background-color: #1a1a2e;
-        padding: 1rem;
-        border-radius: 5px;
-        margin: 1rem 0;
-        border-left: 4px solid #4CAF50;
-    }
+        .stApp {
+            background-color: #0e1117;
+            color: white;
+        }
+        
+        .main-header {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f);
+            color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .platform-card {
+            background-color: #262730;
+            padding: 1.5rem;
+            border-radius: 10px;
+            border-left: 4px solid;
+            margin: 1rem 0;
+            height: 320px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        
+        .linkedin-card {
+            border-left-color: #0077B5;
+        }
+        
+        .facebook-card {
+            border-left-color: #1877F2;
+        }
+        
+        .facebook-pro-card {
+            border-left-color: #FF6B35;
+        }
+        
+        .website-card {
+            border-left-color: #4CAF50;
+        }
+        
+        .feature-list {
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+            flex-grow: 1;
+        }
+        
+        .status-box {
+            background-color: #1a1a2e;
+            padding: 1rem;
+            border-radius: 5px;
+            margin: 0.5rem 0;
+            min-height: 120px;
+        }
+        
+        .pro-badge {
+            background: linear-gradient(45deg, #FF6B35, #FF8E53);
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+        
+        .website-badge {
+            background: linear-gradient(45deg, #4CAF50, #8BC34A);
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+        
+        .button-container {
+            margin-top: auto;
+            padding-top: 1rem;
+        }
+        
+        .status-container {
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+        }
     </style>
     """, unsafe_allow_html=True)
     
-    # Header
+    # Header section
     st.markdown("""
     <div class="main-header">
-        <h1 style="margin:0;">🔍 AI Data Extractor Dashboard</h1>
-        <p style="margin:0; opacity: 0.9;">Real Online Data Extraction + AI Analysis</p>
+        <h1 style="margin:0;">🔍 Social Media & Website Data Extractor</h1>
+        <p style="margin:0; opacity: 0.9;">Developed by [Refat]</p>
     </div>
     """, unsafe_allow_html=True)
     
-    st.success("✅ All tools work ONLINE! No local setup required.")
+    st.markdown("Choose between LinkedIn, Facebook, and Website extractors based on your needs.")
     
-    # Tool selection
-    st.markdown("## 🚀 Choose Your Data Extractor")
+    # Initialize session state for tracking launched apps
+    if 'linkedin_port' not in st.session_state:
+        st.session_state.linkedin_port = None
+    if 'facebook_port' not in st.session_state:
+        st.session_state.facebook_port = None
+    if 'facebook_pro_port' not in st.session_state:
+        st.session_state.facebook_pro_port = None
+    if 'website_port' not in st.session_state:
+        st.session_state.website_port = None
     
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🌐 Website Extractor", 
-        "💼 LinkedIn Data", 
-        "📊 Data Analyzer",
-        "🛠️ Multi-URL Batch"
-    ])
+    # Platform selection - Using 4 columns for all options
+    st.markdown("## 🚀 Launch Extractors")
     
-    with tab1:
-        st.header("🌐 Website Content Extractor")
-        st.write("**Extract and analyze content from any website**")
-        
-        url = st.text_input("Enter website URL:", "https://httpbin.org/html")
-        extraction_type = st.selectbox("Extraction type:", 
-                                      ["Full Content", "Text Only", "Links", "Headings"])
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            if st.button("🚀 Extract Website Data", use_container_width=True):
-                if url:
-                    with st.spinner("Extracting data and analyzing with AI..."):
-                        data, error = extract_website_data(url)
-                        
-                        if error:
-                            st.error(f"❌ Extraction failed: {error}")
-                        else:
-                            st.success("✅ Data extracted successfully!")
-                            
-                            # Display results
-                            with st.expander("📊 Extracted Content", expanded=True):
-                                st.subheader("Page Title")
-                                st.write(data['title'])
-                                
-                                if data['meta_description']:
-                                    st.subheader("Meta Description")
-                                    st.write(data['meta_description'])
-                                
-                                if data['headings']:
-                                    st.subheader("Headings")
-                                    for heading in data['headings']:
-                                        st.write(f"• {heading}")
-                                
-                                if data['paragraphs']:
-                                    st.subheader("Key Content")
-                                    for i, para in enumerate(data['paragraphs'][:3], 1):
-                                        st.write(f"{i}. {para}")
-                            
-                            # AI Analysis
-                            st.markdown("---")
-                            st.subheader("🤖 AI Analysis")
-                            context = f"Title: {data['title']}. Content: {' '.join(data['paragraphs'][:2])}"
-                            ai_response = get_ai_response("analyze this website content", context)
-                            st.info(ai_response)
-        
-        with col2:
-            if st.button("📈 Quick Analysis", use_container_width=True):
-                st.info("Analyzing content structure and patterns...")
+    col1, col2, col3, col4 = st.columns(4)
     
-    with tab2:
-        st.header("💼 LinkedIn Public Data Extractor")
-        st.write("**Extract information from public LinkedIn profiles**")
+    with col1:
+        st.markdown("""
+        <div class="platform-card linkedin-card">
+            <h3>💼 LinkedIn Extractor</h3>
+            <ul class="feature-list">
+                <li>No login required</li>
+                <li>Profile, company, and post analysis</li>
+                <li>Quick data extraction</li>
+                <li>AI-powered insights</li>
+            </ul>
+            <div class="button-container">
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        profile_url = st.text_input("LinkedIn Profile URL:", 
-                                   "https://linkedin.com/in/example")
-        
-        if st.button("🔍 Extract LinkedIn Data", use_container_width=True):
-            if profile_url:
-                with st.spinner("Extracting public profile data..."):
-                    data, error = linkedin_public_data(profile_url)
-                    
-                    if error:
-                        st.error(f"❌ {error}")
-                    else:
-                        st.success("✅ Profile data extracted!")
-                        
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.subheader("Profile Information")
-                            st.write(f"**Name:** {data['name']}")
-                            st.write(f"**Headline:** {data['headline']}")
-                            st.write(f"**About:** {data['about']}")
-                        
-                        with col2:
-                            st.subheader("Professional Details")
-                            st.write("**Experience:**")
-                            for exp in data['experience']:
-                                st.write(f"• {exp}")
-                            
-                            st.write("**Skills:**")
-                            st.write(", ".join(data['skills']))
-                        
-                        # AI Analysis
-                        st.markdown("---")
-                        st.subheader("🤖 AI Professional Analysis")
-                        context = f"Profile: {data['name']} - {data['headline']}"
-                        ai_response = get_ai_response("analyze this professional profile", context)
-                        st.info(ai_response)
-    
-    with tab3:
-        st.header("📊 Data Analysis & AI Chat")
-        st.write("**Analyze extracted data and chat with AI**")
-        
-        analysis_type = st.selectbox("Analysis type:", 
-                                    ["Content Analysis", "Data Patterns", "SEO Analysis", "Sentiment Check"])
-        
-        user_input = st.text_area("Enter text for analysis:", 
-                                 "Paste your extracted content here for AI analysis...")
-        
-        if st.button("🤖 Analyze with AI", use_container_width=True):
-            if user_input:
-                with st.spinner("AI is analyzing your content..."):
-                    ai_response = get_ai_response(f"{analysis_type.lower()}: {user_input}")
-                    
-                    st.subheader("AI Analysis Result")
-                    st.markdown(f"<div class='extraction-result'>{ai_response}</div>", 
-                               unsafe_allow_html=True)
-                    
-                    # Additional insights
-                    st.subheader("📈 Quick Insights")
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.metric("Content Length", f"{len(user_input)} chars")
-                    
-                    with col2:
-                        st.metric("Word Count", f"{len(user_input.split())} words")
-                    
-                    with col3:
-                        st.metric("Analysis Type", analysis_type)
-    
-    with tab4:
-        st.header("🛠️ Multi-URL Batch Processing")
-        st.write("**Extract data from multiple URLs at once**")
-        
-        urls_input = st.text_area("Enter URLs (one per line):", 
-                                 "https://httpbin.org/html\nhttps://httpbin.org/json")
-        
-        if st.button("🔧 Process Multiple URLs", use_container_width=True):
-            urls = [url.strip() for url in urls_input.split('\n') if url.strip()]
-            
-            if urls:
-                results = []
-                progress_bar = st.progress(0)
+        if st.button("🚀 Launch LinkedIn Extractor", key="linkedin_btn", use_container_width=True):
+            if os.path.exists("linkdin.py"):
+                # Get an available port
+                port = get_available_port(8601)
+                st.session_state.linkedin_port = port
                 
-                for i, url in enumerate(urls):
-                    try:
-                        data, error = extract_website_data(url)
-                        if not error:
-                            results.append({
-                                'url': url,
-                                'title': data['title'],
-                                'status': '✅ Success',
-                                'content_length': len(str(data))
-                            })
-                        else:
-                            results.append({
-                                'url': url,
-                                'title': 'Error',
-                                'status': '❌ Failed',
-                                'content_length': 0
-                            })
+                # Show status
+                with st.spinner(f"Starting LinkedIn extractor on port {port}..."):
+                    # Run in thread to avoid blocking
+                    run_streamlit_app_in_thread("linkdin.py", port)
+                    time.sleep(5)  # Give it time to start
                     
-                    except Exception as e:
-                        results.append({
-                            'url': url,
-                            'title': 'Error',
-                            'status': f'❌ {str(e)}',
-                            'content_length': 0
-                        })
+                    # Open in browser
+                    webbrowser.open_new_tab(f"http://localhost:{port}")
+                    st.success(f"✅ LinkedIn extractor launched on port {port}!")
                     
-                    progress_bar.progress((i + 1) / len(urls))
+                    # Store in session state
+                    st.session_state.linkedin_launched = True
+            else:
+                st.error("❌ linkdin.py file not found!")
+
+    with col2:
+        st.markdown("""
+        <div class="platform-card facebook-card">
+            <h3>📘 Facebook Extractor</h3>
+            <ul class="feature-list">
+                <li>Manual login required</li>
+                <li>Group post extraction</li>
+                <li>Works with private groups</li>
+                <li>AI conversation analysis</li>
+                <li>Basic Facebook data extraction</li>
+            </ul>
+            <div class="button-container">
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🚀 Launch Facebook Extractor", key="facebook_btn", use_container_width=True):
+            if os.path.exists("facebook.py"):
+                # Get an available port
+                port = get_available_port(8701)
+                st.session_state.facebook_port = port
                 
-                # Display results
-                st.subheader("Batch Processing Results")
-                df = pd.DataFrame(results)
-                st.dataframe(df)
+                with st.spinner(f"Starting Facebook extractor on port {port}..."):
+                    # Run in thread to avoid blocking
+                    run_streamlit_app_in_thread("facebook.py", port)
+                    time.sleep(5)  # Give it time to start
+                    
+                    # Open in browser
+                    webbrowser.open_new_tab(f"http://localhost:{port}")
+                    st.success(f"✅ Facebook extractor launched on port {port}!")
+                    
+                    # Store in session state
+                    st.session_state.facebook_launched = True
+            else:
+                st.error("❌ facebook.py file not found!")
+    
+    with col3:
+        st.markdown("""
+        <div class="platform-card facebook-pro-card">
+            <h3>🔥 Facebook Extractor 2.0 <span class="pro-badge">PRO</span></h3>
+            <ul class="feature-list">
+                <li>Enhanced Facebook data extraction</li>
+                <li>More powerful algorithms</li>
+                <li>Faster processing speed</li>
+                <li>Advanced AI analysis</li>
+                <li>Better error handling</li>
+                <li>Extended feature set</li>
+            </ul>
+            <div class="button-container">
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🚀 Launch Facebook Extractor 2.0", key="facebook_pro_btn", use_container_width=True):
+            if os.path.exists("let.py"):
+                # Get an available port
+                port = get_available_port(8801)
+                st.session_state.facebook_pro_port = port
                 
-                st.success(f"✅ Processed {len([r for r in results if 'Success' in r['status']])}/{len(urls)} URLs successfully")
+                with st.spinner(f"Starting Facebook Extractor 2.0 on port {port}..."):
+                    # Run in thread to avoid blocking
+                    run_streamlit_app_in_thread("let.py", port)
+                    time.sleep(5)  # Give it time to start
+                    
+                    # Open in browser
+                    webbrowser.open_new_tab(f"http://localhost:{port}")
+                    st.success(f"✅ Facebook Extractor 2.0 launched on port {port}!")
+                    
+                    # Store in session state
+                    st.session_state.facebook_pro_launched = True
+            else:
+                st.error("❌ let.py file not found!")
     
-    # Quick tools sidebar
-    st.sidebar.markdown("## ⚡ Quick Tools")
+    with col4:
+        st.markdown("""
+        <div class="platform-card website-card">
+            <h3>🌐 Website Extractor <span class="website-badge">NEW</span></h3>
+            <ul class="feature-list">
+                <li>Extract data from any website</li>
+                <li>URL-based content extraction</li>
+                <li>Text and data scraping</li>
+                <li>AI-powered content analysis</li>
+                <li>Batch URL processing</li>
+                <li>Export in multiple formats</li>
+            </ul>
+            <div class="button-container">
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🚀 Launch Website Extractor", key="website_btn", use_container_width=True):
+            if os.path.exists("website.py"):
+                # Get an available port
+                port = get_available_port(8901)
+                st.session_state.website_port = port
+                
+                with st.spinner(f"Starting Website extractor on port {port}..."):
+                    # Run in thread to avoid blocking
+                    run_streamlit_app_in_thread("website.py", port)
+                    time.sleep(5)  # Give it time to start
+                    
+                    # Open in browser
+                    webbrowser.open_new_tab(f"http://localhost:{port}")
+                    st.success(f"✅ Website extractor launched on port {port}!")
+                    
+                    # Store in session state
+                    st.session_state.website_launched = True
+            else:
+                st.error("❌ website.py file not found!")
     
-    if st.sidebar.button("🌐 Test Web Connection"):
-        try:
-            response = requests.get("https://httpbin.org/json", timeout=5)
-            st.sidebar.success("✅ Internet connection working!")
-        except:
-            st.sidebar.error("❌ Connection failed")
+    # Show current status - Properly aligned section
+    st.markdown("---")
+    st.subheader("🔄 Current Status")
     
-    if st.sidebar.button("📊 Sample Analysis"):
-        sample_text = "This is a sample text for AI analysis. It demonstrates how the extraction and analysis tools work together."
-        ai_response = get_ai_response("analyze this sample text", sample_text)
-        st.sidebar.info(ai_response)
+    status_col1, status_col2, status_col3, status_col4 = st.columns(4)
     
-    st.sidebar.markdown("---")
-    st.sidebar.info("""
-    **💡 Tips:**
-    - Use public websites for best results
-    - For LinkedIn, use public profile URLs
-    - Batch processing works with multiple URLs
-    - AI analysis provides instant insights
-    """)
+    with status_col1:
+        st.markdown("### 💼 LinkedIn Extractor")
+        if st.session_state.linkedin_port:
+            st.markdown(f"""
+            <div class="status-container">
+                <div class="status-box">
+                    ✅ <strong>Running on:</strong> http://localhost:{st.session_state.linkedin_port}<br>
+                    📁 <strong>File:</strong> linkdin.py
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔄 Restart LinkedIn", key="restart_linkedin", use_container_width=True):
+                st.session_state.linkedin_port = None
+                st.rerun()
+        else:
+            st.info("💤 Not running - Click launch button to start")
+    
+    with status_col2:
+        st.markdown("### 📘 Facebook Extractor")
+        if st.session_state.facebook_port:
+            st.markdown(f"""
+            <div class="status-container">
+                <div class="status-box">
+                    ✅ <strong>Running on:</strong> http://localhost:{st.session_state.facebook_port}<br>
+                    📁 <strong>File:</strong> facebook.py
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔄 Restart Facebook", key="restart_facebook", use_container_width=True):
+                st.session_state.facebook_port = None
+                st.rerun()
+        else:
+            st.info("💤 Not running - Click launch button to start")
+    
+    with status_col3:
+        st.markdown("### 🔥 Facebook Extractor 2.0")
+        if st.session_state.facebook_pro_port:
+            st.markdown(f"""
+            <div class="status-container">
+                <div class="status-box">
+                    ✅ <strong>Running on:</strong> http://localhost:{st.session_state.facebook_pro_port}<br>
+                    📁 <strong>File:</strong> let.py
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔄 Restart Facebook 2.0", key="restart_facebook_pro", use_container_width=True):
+                st.session_state.facebook_pro_port = None
+                st.rerun()
+        else:
+            st.info("💤 Not running - Click launch button to start")
+    
+    with status_col4:
+        st.markdown("### 🌐 Website Extractor")
+        if st.session_state.website_port:
+            st.markdown(f"""
+            <div class="status-container">
+                <div class="status-box">
+                    ✅ <strong>Running on:</strong> http://localhost:{st.session_state.website_port}<br>
+                    📁 <strong>File:</strong> website.py
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔄 Restart Website", key="restart_website", use_container_width=True):
+                st.session_state.website_port = None
+                st.rerun()
+        else:
+            st.info("💤 Not running - Click launch button to start")
+    
+    # System check
+    st.markdown("---")
+    st.subheader("🔧 System Check")
+    
+    if st.button("Check System Status", use_container_width=True):
+        # Check for files
+        linkedin_exists = os.path.exists("linkdin.py")
+        facebook_exists = os.path.exists("facebook.py")
+        let_exists = os.path.exists("let.py")
+        website_exists = os.path.exists("website.py")
+        ollama_running = check_port_in_use(11434)
+        
+        st.markdown("### 📁 File Status")
+        
+        check_col1, check_col2, check_col3, check_col4 = st.columns(4)
+        
+        with check_col1:
+            if linkedin_exists:
+                st.success("✅ linkdin.py found (LinkedIn extractor)")
+            else:
+                st.error("❌ linkdin.py not found!")
+        
+        with check_col2:
+            if facebook_exists:
+                st.success("✅ facebook.py found (Facebook extractor)")
+            else:
+                st.error("❌ facebook.py not found!")
+        
+        with check_col3:
+            if let_exists:
+                st.success("✅ let.py found (Facebook Extractor 2.0)")
+            else:
+                st.error("❌ let.py not found!")
+        
+        with check_col4:
+            if website_exists:
+                st.success("✅ website.py found (Website extractor)")
+            else:
+                st.error("❌ website.py not found!")
+        
+        st.markdown("### 🤖 Ollama Status")
+        if ollama_running:
+            st.success("✅ Ollama is running on port 11434")
+        else:
+            st.warning("⚠️ Ollama not detected - AI features will not work")
+        
+        st.markdown("### 🌐 Port Status")
+        dashboard_port = 8501  # Default Streamlit port
+        st.info(f"Dashboard running on: http://localhost:{dashboard_port}")
+        
+        # Check which ports are in use
+        ports_to_check = [8501, 8601, 8701, 8801, 8901, 8602, 8702, 8802, 8902]
+        port_cols = st.columns(3)
+        
+        for i, port in enumerate(ports_to_check):
+            col_index = i % 3
+            with port_cols[col_index]:
+                if check_port_in_use(port):
+                    st.info(f"Port {port}: 🔴 In use")
+                else:
+                    st.info(f"Port {port}: 🟢 Available")
+    
+    # Instructions
+    with st.expander("📋 Usage Instructions", expanded=False):
+        st.markdown("""
+        ## Quick Start Guide
+        
+        **1. Start the Dashboard:**
+        ```bash
+        streamlit run main_dashboard.py
+        ```
+        
+        **2. Choose Your Extractor:**
+        - **💼 LinkedIn Extractor**: For LinkedIn data extraction (no login required)
+        - **📘 Facebook Extractor**: Basic Facebook data extraction
+        - **🔥 Facebook Extractor 2.0**: Advanced Facebook extraction with enhanced features
+        - **🌐 Website Extractor**: Extract data from any website URL
+        
+        **3. Port Allocation:**
+        - Dashboard: Port 8501
+        - LinkedIn: Port 8601+
+        - Facebook Basic: Port 8701+
+        - Facebook 2.0: Port 8801+
+        - Website: Port 8901+
+        
+        **4. Recommended Workflow:**
+        - Start with Facebook Extractor 2.0 for best performance
+        - Use basic Facebook extractor if 2.0 has compatibility issues
+        - LinkedIn extractor works independently
+        - Website extractor for general web content extraction
+        
+        **5. Required Setup:**
+        - Run Ollama: `ollama serve`
+        - Chrome browser installed (for Facebook and Website extractors)
+        - Required files in same folder
+        
+        **6. Troubleshooting:**
+        - If Facebook 2.0 doesn't work, try the basic version
+        - Use the restart buttons if needed
+        - Check system status for file availability
+        - Make sure required ports are available
+        - For website extraction, ensure target websites allow scraping
+        """)
+    
+    # File list
+    with st.expander("🔍 Files in Current Directory", expanded=False):
+        st.write("**Python files found:**")
+        python_files = [f for f in os.listdir('.') if f.endswith('.py')]
+        
+        file_cols = st.columns(2)
+        for i, file in enumerate(sorted(python_files)):
+            col_index = i % 2
+            with file_cols[col_index]:
+                if os.path.exists(file):
+                    file_size = os.path.getsize(file)
+                    status = "✅" if file in ["linkdin.py", "facebook.py", "main_dashboard.py", "let.py", "website.py"] else "📄"
+                    st.write(f"{status} {file} ({file_size} bytes)")
 
 if __name__ == "__main__":
     main()
