@@ -1,32 +1,4 @@
 import streamlit as st
-import linkdin_hf
-import let_hf
-
-
-HUGGINGFACE_API_KEY = "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"
-
-
-st.set_page_config(page_title="AI Dashboard", page_icon="🤖", layout="wide")
-
-
-st.title("🤖 AI Dashboard")
-
-
-col1, col2 = st.columns(2)
-
-
-with col1:
-st.header("💼 LinkedIn Analyzer")
-if st.button("Launch LinkedIn Analyzer"):
-linkdin_hf.main(HUGGINGFACE_API_KEY)
-
-
-with col2:
-st.header("📘 Facebook Group Extractor")
-if st.button("Launch Facebook Extractor"):
-let_hf.main(HUGGINGFACE_API_KEY)
-
-import streamlit as st
 import subprocess
 import sys
 import os
