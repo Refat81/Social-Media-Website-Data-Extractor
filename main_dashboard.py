@@ -8,21 +8,18 @@ import time
 import threading
 
 def check_port_in_use(port: int) -> bool:
-    """Check if a port is already in use"""
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(1)
         return s.connect_ex(('localhost', port)) == 0
 
 def get_available_port(start_port: int = 8601) -> int:
-    """Find an available port starting from start_port"""
     port = start_port
     while check_port_in_use(port):
         port += 1
     return port
 
 def run_streamlit_app_in_thread(app_file: str, port: int):
-    """Run Streamlit app in a separate thread"""
     def run_app():
         try:
             subprocess.run([
@@ -30,9 +27,7 @@ def run_streamlit_app_in_thread(app_file: str, port: int):
                 app_file, 
                 "--server.port", str(port),
                 "--server.headless", "true",
-                "--browser.serverAddress", "localhost",
-                "--server.enableCORS", "false",
-                "--server.enableXsrfProtection", "false"
+                "--browser.serverAddress", "localhost"
             ], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Error running {app_file}: {e}")
@@ -49,67 +44,17 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    # Simple dark theme CSS
     st.markdown("""
     <style>
-        .stApp {
-            background-color: #0e1117;
-            color: white;
-        }
-        
-        .main-header {
-            background: linear-gradient(135deg, #1a2a6c, #b21f1f);
-            color: white;
-            padding: 2rem;
-            border-radius: 10px;
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-        
-        .platform-card {
-            background-color: #262730;
-            padding: 1.5rem;
-            border-radius: 10px;
-            border-left: 4px solid;
-            margin: 1rem 0;
-            height: 280px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-        
-        .linkedin-card {
-            border-left-color: #0077B5;
-        }
-        
-        .facebook-card {
-            border-left-color: #1877F2;
-        }
-        
-        .facebook-pro-card {
-            border-left-color: #FF6B35;
-        }
-        
-        .feature-list {
-            margin: 1rem 0;
-            padding-left: 1.5rem;
-            flex-grow: 1;
-        }
-        
-        .api-key-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 1.5rem;
-            border-radius: 10px;
-            margin-bottom: 2rem;
-        }
-        
-        .status-box {
-            background-color: #1a1a2e;
-            padding: 1rem;
-            border-radius: 5px;
-            margin: 0.5rem 0;
-            min-height: 120px;
-        }
+        .stApp { background-color: #0e1117; color: white; }
+        .main-header { background: linear-gradient(135deg, #1a2a6c, #b21f1f); color: white; padding: 2rem; border-radius: 10px; text-align: center; margin-bottom: 2rem; }
+        .platform-card { background-color: #262730; padding: 1.5rem; border-radius: 10px; border-left: 4px solid; margin: 1rem 0; height: 280px; }
+        .linkedin-card { border-left-color: #0077B5; }
+        .facebook-card { border-left-color: #1877F2; }
+        .facebook-pro-card { border-left-color: #FF6B35; }
+        .feature-list { margin: 1rem 0; padding-left: 1.5rem; flex-grow: 1; }
+        .api-key-section { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem; }
+        .status-box { background-color: #1a1a2e; padding: 1rem; border-radius: 5px; margin: 0.5rem 0; min-height: 120px; }
     </style>
     """, unsafe_allow_html=True)
     
@@ -122,42 +67,27 @@ def main():
     """, unsafe_allow_html=True)
     
     # API Configuration
-    col1, col2 = st.columns([2, 1])
+    hf_api_key = st.text_input(
+        "🤗 Enter Your HuggingFace API Key",
+        type="password",
+        placeholder="hf_xxxxxxxxxxxxxxxx",
+        help="Get FREE API key from huggingface.co/settings/tokens"
+    )
     
-    with col1:
-        hf_api_key = st.text_input(
-            "🤗 Enter Your HuggingFace API Key",
-            type="password",
-            placeholder="hf_xxxxxxxxxxxxxxxx",
-            help="Get FREE API key from huggingface.co/settings/tokens"
-        )
-    
-    with col2:
-        st.markdown("### 📝 How to get key:")
-        st.markdown("""
-        1. Go to [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-        2. Sign up/login (FREE)
-        3. Click **New token**
-        4. Name it (e.g., 'streamlit-app')
-        5. Copy and paste here
-        """)
-    
-    # Store API key in session state
+    # Store API key
     if hf_api_key:
         st.session_state.hf_api_key = hf_api_key
         st.success("✅ HuggingFace API Key saved! You can now launch extractors.")
     
-    # Header section
+    # Header
     st.markdown("""
     <div class="main-header">
         <h1 style="margin:0;">🔍 Social Media Data Extractor</h1>
-        <p style="margin:0; opacity: 0.9;">100% Free - No Ollama Required</p>
+        <p style="margin:0; opacity: 0.9;">100% Free - No Local Setup Required</p>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("All features work with your HuggingFace API key. No local setup needed!")
-    
-    # Initialize session state for tracking launched apps
+    # Initialize session state
     if 'linkedin_port' not in st.session_state:
         st.session_state.linkedin_port = None
     if 'facebook_port' not in st.session_state:
@@ -179,7 +109,7 @@ def main():
                 <li>Profile, company, and post analysis</li>
                 <li>Quick data extraction</li>
                 <li>AI-powered insights</li>
-                <li>100% Free with HuggingFace</li>
+                <li>100% Free</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -191,12 +121,11 @@ def main():
                 if os.path.exists("linkdin_deploy.py"):
                     port = get_available_port(8601)
                     st.session_state.linkedin_port = port
-                    
-                    with st.spinner(f"Starting LinkedIn extractor on port {port}..."):
+                    with st.spinner(f"Starting LinkedIn extractor..."):
                         run_streamlit_app_in_thread("linkdin_deploy.py", port)
                         time.sleep(3)
                         webbrowser.open_new_tab(f"http://localhost:{port}")
-                        st.success(f"✅ LinkedIn extractor launched on port {port}!")
+                        st.success(f"✅ LinkedIn extractor launched!")
                 else:
                     st.error("❌ linkdin_deploy.py file not found!")
 
@@ -209,7 +138,7 @@ def main():
                 <li>Group post extraction</li>
                 <li>Works with private groups</li>
                 <li>AI conversation analysis</li>
-                <li>100% Free with HuggingFace</li>
+                <li>100% Free</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -221,12 +150,11 @@ def main():
                 if os.path.exists("facebook_deploy.py"):
                     port = get_available_port(8701)
                     st.session_state.facebook_port = port
-                    
-                    with st.spinner(f"Starting Facebook extractor on port {port}..."):
+                    with st.spinner(f"Starting Facebook extractor..."):
                         run_streamlit_app_in_thread("facebook_deploy.py", port)
                         time.sleep(3)
                         webbrowser.open_new_tab(f"http://localhost:{port}")
-                        st.success(f"✅ Facebook extractor launched on port {port}!")
+                        st.success(f"✅ Facebook extractor launched!")
                 else:
                     st.error("❌ facebook_deploy.py file not found!")
     
@@ -239,7 +167,7 @@ def main():
                 <li>More powerful algorithms</li>
                 <li>Faster processing speed</li>
                 <li>Advanced AI analysis</li>
-                <li>100% Free with HuggingFace</li>
+                <li>100% Free</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -251,111 +179,59 @@ def main():
                 if os.path.exists("let_deploy.py"):
                     port = get_available_port(8801)
                     st.session_state.facebook_pro_port = port
-                    
-                    with st.spinner(f"Starting Facebook Extractor 2.0 on port {port}..."):
+                    with st.spinner(f"Starting Facebook Extractor 2.0..."):
                         run_streamlit_app_in_thread("let_deploy.py", port)
                         time.sleep(3)
                         webbrowser.open_new_tab(f"http://localhost:{port}")
-                        st.success(f"✅ Facebook Extractor 2.0 launched on port {port}!")
+                        st.success(f"✅ Facebook Extractor 2.0 launched!")
                 else:
                     st.error("❌ let_deploy.py file not found!")
     
-    # Show current status
+    # Status
     st.markdown("---")
     st.subheader("🔄 Current Status")
     
     status_col1, status_col2, status_col3 = st.columns(3)
     
     with status_col1:
-        st.markdown("### 💼 LinkedIn Extractor")
+        st.markdown("### 💼 LinkedIn")
         if st.session_state.linkedin_port:
-            st.markdown(f"""
-            <div class="status-box">
-                ✅ <strong>Running on:</strong> http://localhost:{st.session_state.linkedin_port}<br>
-                🔑 <strong>API Status:</strong> ✅ Active
-            </div>
-            """, unsafe_allow_html=True)
+            st.success(f"✅ Running on port {st.session_state.linkedin_port}")
         else:
-            st.info("💤 Not running - Configure API Key and click launch")
+            st.info("💤 Not running")
     
     with status_col2:
-        st.markdown("### 📘 Facebook Extractor")
+        st.markdown("### 📘 Facebook")
         if st.session_state.facebook_port:
-            st.markdown(f"""
-            <div class="status-box">
-                ✅ <strong>Running on:</strong> http://localhost:{st.session_state.facebook_port}<br>
-                🔑 <strong>API Status:</strong> ✅ Active
-            </div>
-            """, unsafe_allow_html=True)
+            st.success(f"✅ Running on port {st.session_state.facebook_port}")
         else:
-            st.info("💤 Not running - Configure API Key and click launch")
+            st.info("💤 Not running")
     
     with status_col3:
-        st.markdown("### 🔥 Facebook Extractor 2.0")
+        st.markdown("### 🔥 Facebook 2.0")
         if st.session_state.facebook_pro_port:
-            st.markdown(f"""
-            <div class="status-box">
-                ✅ <strong>Running on:</strong> http://localhost:{st.session_state.facebook_pro_port}<br>
-                🔑 <strong>API Status:</strong> ✅ Active
-            </div>
-            """, unsafe_allow_html=True)
+            st.success(f"✅ Running on port {st.session_state.facebook_pro_port}")
         else:
-            st.info("💤 Not running - Configure API Key and click launch")
+            st.info("💤 Not running")
     
-    # Deployment Instructions
-    with st.expander("🚀 Streamlit Cloud Deployment", expanded=True):
+    # Instructions
+    with st.expander("📋 How to Use", expanded=True):
         st.markdown("""
-        ## How to Deploy to Streamlit Cloud (FREE)
+        1. **Get FREE API Key:**
+           - Go to https://huggingface.co/settings/tokens
+           - Create account (FREE)
+           - Click "New token" 
+           - Copy your token (starts with hf_)
         
-        **1. Get HuggingFace API Key (FREE):**
-        - Go to: https://huggingface.co/settings/tokens
-        - Create account (FREE, no credit card)
-        - Click "New token"
-        - Name it and copy the token
+        2. **Enter API Key above**
         
-        **2. Deploy to Streamlit Cloud:**
-        - Go to: https://share.streamlit.io
-        - Connect your GitHub repository
-        - Set main file to: `main_dashboard.py`
+        3. **Click any extractor to launch**
         
-        **3. Set Secrets in Streamlit:**
-        - In your Streamlit app dashboard
-        - Go to "Settings" → "Secrets"
-        - Add this:
-        ```toml
-        HUGGINGFACEHUB_API_TOKEN = "hf_xxxxxxxxxxxxxxxx"
-        ```
-        
-        **4. That's it! Your app will be live at:**
-        `https://your-app-name.streamlit.app`
-        
-        **Free Tier Limits:**
-        - HuggingFace: 10,000 tokens/month FREE
-        - Streamlit: Unlimited apps FREE
-        - No credit card required
-        """)
-    
-    # Cost Information
-    with st.expander("💰 Cost Information"):
-        st.markdown("""
-        ## 100% Free Setup
-        
-        **HuggingFace API:**
-        - ✅ 10,000 tokens per month FREE
-        - ✅ No credit card required
-        - ✅ Perfect for personal projects
-        - ✅ Enough for hundreds of analyses
-        
-        **Streamlit Cloud:**
-        - ✅ Unlimited apps FREE
-        - ✅ No server costs
-        - ✅ Automatic deployments
-        
-        **No Ollama Required:**
-        - ✅ No local setup
-        - ✅ No GPU required
-        - ✅ Works on any device
-        - ✅ Cloud-based AI
+        4. **For Streamlit Cloud:**
+           - Add this to Secrets:
+           ```
+           HUGGINGFACEHUB_API_TOKEN = "your_token_here"
+           ```
         """)
 
 if __name__ == "__main__":
